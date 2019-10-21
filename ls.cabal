@@ -25,5 +25,7 @@ executable ls
                      , directory
                      , ansi-terminal
                      , cond
+                     , flow
+                     , unix
   -- hs-source-dirs:
   default-language:    Haskell2010
