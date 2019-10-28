@@ -1,90 +1,47 @@
 module Main where
 
 import           Control.Conditional
-import           Control.Monad
-import           Data.Function
+
 import           Data.List
-import           Flow
 import           System.Console.ANSI
-import           System.Directory
-import           System.Environment
-import           System.IO
-import           System.IO.Unsafe
-import           System.Posix.IO       (stdOutput)
-import           System.Posix.Terminal (queryTerminal)
-import           Text.Printf
+import           System.Console.Terminal.Size as TermSize
+import qualified System.Directory             as Dir
 
-instance PrintfArg Bool where
-  formatArg True _ s  = "true" ++ s
-  formatArg False _ s = "false" ++ s
+columns :: [(String, Color)] -> IO ()
+columns = undefined
 
--- data Args = ShowAll | ShowAlmostAll | ShowDefault | HumanFormat | LongListing deriving (Enum)
-data ShowMode
-  = ShowAll
-  | ShowAlmostAll
-  | ShowDefault
-  deriving (Enum, Show)
-
-data Args =
-  Args
-    { showMode    :: ShowMode
-    , humanFormat :: Bool
-    , longListing :: Bool
-    }
+data Item
+  = File String
+  | Directory String
   deriving (Show)
 
-parseShortArg :: String -> String
-parseShortArg ('l':tail) = "(long)" ++ parseShortArg tail
-parseShortArg ('h':tail) = "(human)" ++ parseShortArg tail
-parseShortArg _          = ""
+cmpItems :: Item -> Item -> Ordering
+cmpItems (Directory a) (File b)      = LT
+cmpItems (File a) (Directory b)      = GT
+cmpItems (File a) (File b)           = compare a b
+cmpItems (Directory a) (Directory b) = compare a b
 
-parseLongArg :: String -> String
-parseLongArg "human-readable" = "(human)"
-parseLongArg _                = "(longarg)"
+statItem :: FilePath -> IO Item
+statItem path =
+  condM
+    [ (Dir.doesDirectoryExist path, return $ Directory path)
+    , (Dir.doesFileExist path, return $ File path)
+    ]
 
-parseArg :: String -> String
-parseArg ""             = ""
-parseArg ('-':'-':tail) = parseLongArg tail
-parseArg ('-':tail)     = parseShortArg tail
-parseArg a              = "uff"
+printColored :: (String, Color) -> IO ()
+printColored (str, col) = do
+  setSGR [SetColor Foreground Vivid col]
+  putStrLn str
 
-parseArgs :: [String] -> String
-parseArgs (head:args) = parseArg head ++ parseArgs args
-parseArgs _           = ""
+color :: Item -> (String, Color)
+color (File item)      = (item, Red)
+color (Directory item) = (item ++ "/", Green)
 
-isTty :: Bool
-{-# NOINLINE isTty #-}
-isTty = unsafePerformIO (queryTerminal stdOutput)
+printItems :: [Item] -> IO ()
+printItems items = mapM_ (printColored . color) $ sortBy cmpItems items
 
-getLinkText :: FilePath -> String
-getLinkText path = " -> " ++ unsafePerformIO (getSymbolicLinkTarget path)
-
-printFiles :: Color -> FilePath -> [FilePath] -> IO ()
-printFiles color _ [] = return ()
-printFiles color dir files
-  -- file name
- = do
-  setSGR [SetColor Foreground Vivid color]
-  putStr (head files)
-  -- symlink arrow
-  setSGR [SetColor Foreground Vivid White]
-  let fullPath = dir ++ "/" ++ head files
-  let isLink = (unsafePerformIO . pathIsSymbolicLink) fullPath
-  cond [(isLink, putStr $ getLinkText fullPath), (otherwise, return ())]
-  putStrLn ""
-  printFiles color dir (tail files)
-
-printAll :: FilePath -> [FilePath] -> IO ()
-printAll dir items = do
-  filterM doesDirectoryExist items >>=
-    map (++ "/") .> sort .> printFiles Green dir
-  filterM doesFileExist items >>= sort .> printFiles Cyan dir
+printDirContents :: FilePath -> IO ()
+printDirContents dir = Dir.listDirectory dir >>= mapM statItem >>= printItems
 
 main :: IO ()
-main = do
-  printf "isTty:%b" isTty
-  putStrLn "\n"
-  putStrLn . parseArgs . unsafePerformIO $ getArgs
-  --getArgs >>= print
-  listDirectory "." >>= printAll "."
-  putStrLn ""
+main = printDirContents "."
