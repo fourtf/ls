@@ -4,8 +4,7 @@ import           Control.Conditional
 
 import           Data.List
 import           System.Console.ANSI
-import           System.Console.Terminal.Size as TermSize
-import qualified System.Directory             as Dir
+import qualified System.Directory    as Dir
 
 columns :: [(String, Color)] -> IO ()
 columns = undefined
